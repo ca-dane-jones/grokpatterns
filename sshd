@@ -13,7 +13,7 @@ SSHD_SESSION_CLOSED session closed for local user %{USERNAME:user__name} from \[
 SSHD_CONN_CLOSE Connection closed by %{IP:client__ip} port %{POSINT:client__port}
 
 # File access
-SSHD_FILE (?:%{SSHD_FILE_ACCESS}|{SSHD_FILE_ACCESS_MSG})
+SSHD_FILE (?:%{SSHD_FILE_ACCESS}|%{SSHD_FILE_ACCESS_MSG})
 SSHD_FILE_ACCESS (?<file__access__action>[\w,]+) %{QUOTEDSTRING:file__path} flags %{WORD:file__access__type} mode (?<file__mode>[0-9]+)(?:%{GREEDYDATA}|})
 SSHD_FILE_ACCESS_MSG sent status %{GREEDYDATA:file__access__message}
 
