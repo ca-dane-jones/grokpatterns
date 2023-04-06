@@ -1,0 +1,27 @@
+# sshd grok patterns
+SSHD %{SSHD_SYSLOG_HEAD} (?:%{SSHD_AUTH}|%{SSHD_SESSION}|%{SSHD_FILE}|%{SSHD_PAM})
+
+# Authentication messages
+SSHD_AUTH 			    (?:%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS})
+SSHD_AUTH_REQUEST   debug1: userauth-request for user %{USERNAME:user__name} service (?<service__name>[\w\d-]+) method %{WORD:sshd__authentication__method}(?:%{GREEDYDATA}|})
+SSHD_AUTH_STAT 		  debug1: attempt %{NUMBER:sshd__authentication__attempt} failures %{NUMBER:sshd__authentication__failures}%{GREEDYDATA}
+SSHD_USER_GROUPS 	  debug1: user %{USERNAME:user__name} matched group list (?<_tmp__user__groups>[\w,\d]+)%{GREEDYDATA}
+
+# Session and connection messages
+SSHD_SESSION 		    (?:%{SSHD_SESSION_CLOSED}|%{SSHD_CONN_CLOSE})
+SSHD_SESSION_CLOSED session closed for local user %{USERNAME:user__name} from \[%{IP:client__ip}]%{GREEDYDATA}
+SSHD_CONN_CLOSE 	  Connection closed by %{IP:client__ip} port %{POSINT:client__port}
+
+# File access
+SSHD_FILE 			    (?:%{SSHD_FILE_ACCESS}|{SSHD_FILE_ACCESS_MSG})
+SSHD_FILE_ACCESS 	  (?<file__access__action>[\w,]+) %{QUOTEDSTRING:file__path} flags %{WORD:file__access__type} mode (?<file__mode>[0-9]+)(?:%{GREEDYDATA}|})
+SSHD_FILE_ACCESS_MSG sent status %{GREEDYDATA:file__access__message}
+
+# PAM messages
+SSHD_PAM 			      (?:%{SSHD_PAM_INIT}|%{SSHD_PAM_CLIENT}|%{SSHD_PAM_TTY})
+SSHD_PAM_INIT 		  debug1: PAM: initializing for "%{USERNAME:user__name}"
+SSHD_PAM_CLIENT 	  debug1: PAM: setting PAM_RHOST to "%{IP:client__ip}"
+SSHD_PAM_TTY 		    debug1: PAM: setting PAM_TTY to "%{WORD:sshd__pam__tty}"
+
+# General
+SSHD_SYSLOG_HEAD 	%{SYSLOGTIMESTAMP:timestamp} (?<host__hostname>[\w-]+) %{WORD:process__name}\[%{POSINT:process__id}]:
