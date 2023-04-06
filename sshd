@@ -1,10 +1,12 @@
 # sshd grok patterns
 
 # Authentication messages
-SSHD_AUTH 				(?:%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS})
+SSHD_AUTH 				(?:%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS}|%{SSHD_KEYAUTH})
 SSHD_AUTH_REQUEST 		debug1: userauth-request for user %{USERNAME:user__name} service (?<service__name>[\w\d-]+) method %{WORD:sshd__authentication__method}(?:%{GREEDYDATA}|})
 SSHD_AUTH_STAT 			debug1: attempt %{NUMBER:sshd__authentication__attempt} failures %{NUMBER:sshd__authentication__failures}%{GREEDYDATA}
 SSHD_USER_GROUPS 		debug1: user %{USERNAME:user__name} matched group list (?<_tmp__user__groups>[\w,\d]+)%{GREEDYDATA}
+SSHD_KEYAUTH			debug1: matching key found: file %{UNIXPATH:sshd__keyauth__path}, line %{POSINT:sshd__keyauth__linenum} %{WORD:sshd__keyauth__algorithm} %{GREEDYDATA:sshd__keyauth__fingerprint}
+
 
 # Session and connection messages
 SSHD_SESSION 			(?:%{SSHD_SESSION_CLOSED}|%{SSHD_SESSION_CLOSED2}|%{SSHD_CONN_CLOSING}|%{SSHD_CONN_CLOSED}|%SSHD_SESSION_XFER_BYTES)
