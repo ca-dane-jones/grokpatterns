@@ -1,0 +1,82 @@
+# sshd grok patterns
+
+# Start/Stop %{SSHD_INIT}
+SSHD_INIT               (?:%{SSHD_SVC_LISTEN}|%{SSHD_SVC_TERMINATE})
+SSHD_SVC_LISTEN        	Server listening on %{IP:sshd.listen.ip} port %{POSINT:sshd.listen.port}.
+SSHD_SVC_TERMINATE      Received signal %{NUMBER:sshd.signal}; terminating.
+
+# Authentication success messages %{SSHD_AUTH}
+SSHD_AUTH               (?:%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS})
+SSHD_AUTH_REQUEST       debug1: userauth-request for user %{USERNAME:user.name} service (?<service.name>[\w\d-]+) method %{WORD:sshd.authentication.method}(?:%{GREEDYDATA}|})
+SSHD_AUTH_STAT          debug1: attempt %{NUMBER:sshd.authentication.attempt} failures %{NUMBER:sshd.authentication.failures}%{GREEDYDATA}
+SSHD_USER_GROUPS        debug1: user %{USERNAME:user.name} matched group list (?<user.group.name>[\w,\d]+)%{GREEDYDATA}
+
+# Authentication failure messages %{SSHD_AUTH_FAILURE}
+SSHD_AUTH_FAILURE       (?:%{SSHD_AUTH_FAIL}|%{SSHD_AUTH_BADPASSWORD}|%{SSHD_AUTH_INVALID_USER})
+SSHD_AUTH_FAIL          (?<sshd.authentication.result>Failed) %{WORD:sshd.authentication.method} for %{USERNAME:user.name} from %{IP:client.ip} port %{NUMBER:sshd.port} %{WORD:sshd.protocol}
+SSHD_AUTH_BADPASSWORD   (?<sshd.authentication.result>Failed) (?<sshd.authentication.method>password) for invalid user %{USERNAME:user.name} from %{IP:client.ip} port %{NUMBER:sshd.port} %{WORD:sshd.protocol}
+SSHD_AUTH_INVALID_USER 	(?<sshd.authentication.result>Invalid user)\s*%{USERNAME:user.name}? from %{IP:client.ip}(?: port %{POSINT:client.port}|)
+
+# Session and connection messages %{SSHD_SESSION}
+SSHD_SESSION            (?:%{SSHD_SESSION_ACCEPT}|%{SSHD_SESSION_CLOSED}|%{SSHD_SESSION_CLOSED2}|%{SSHD_CONN_CLOSING}|%{SSHD_CONN_CLOSED}|%{SSHD_SESSION_XFER_BYTES}|%{SSHD_SESSION_PAM_OPEN}|%{SSHD_SESSION_PAM_CLOSE})
+SSHD_SESSION_ACCEPT     (?<sshd.authentication.result>Accepted) %{WORD:sshd.authentication.method} for %{USERNAME:user.name} from %{IP:client.ip} port %{NUMBER:sshd.port} %{WORD:sshd.protocol}: %{GREEDYDATA:sshd.cipher}
+SSHD_SESSION_CLOSED     session closed for local user %{USERNAME:user.name} from \[%{IP:client.ip}]%{GREEDYDATA}
+SSHD_SESSION_CLOSED2    Close session: user %{USERNAME:user.name} from %{IP:client.ip} port %{POSINT:sshd.port}%{GREEDYDATA} id %{NUMBER:sshd.channel}%{GREEDYDATA}
+SSHD_SESSION_XFER_BYTES Transferred: sent %{NUMBER:sshd.sentbytes}, received %{NUMBER:sshd.rcvdbytes}%{GREEDYDATA}	
+SSHD_SESSION_PAM_OPEN   pam_unix\(sshd:session\): session opened for user %{USERNAME:user.name} by \(uid=\d+\)
+SSHD_SESSION_PAM_CLOSE  pam_unix\(sshd:session\): session closed for user %{USERNAME:user.name}
+SSHD_CONN_CLOSING       Closing connection to %{IP:client.ip} port %{POSINT:sshd.port}%{GREEDYDATA}
+SSHD_CONN_CLOSED        Connection closed by %{IP:client.ip}(?: port %{POSINT:sshd.port}%{GREEDYDATA}|)
+
+# File access %{SSHD_FILE}
+SSHD_FILE               (?:%{SSHD_FILE_ACCESS}|%{SSHD_FILE_ACCESS_MSG})
+SSHD_FILE_ACCESS        (?<file.access.action>[\w,]+) %{QUOTEDSTRING:file.path} flags %{WORD:file.access.type} mode (?<file.mode>[0-9]+)(?:%{GREEDYDATA}|})
+SSHD_FILE_ACCESS_MSG    sent status %{GREEDYDATA:file.access.message}
+
+# Other PAM messages %{SSHD_PAM}
+SSHD_PAM                (?:%{SSHD_PAM_INIT}|%{SSHD_PAM_CLIENT}|%{SSHD_PAM_TTY})
+SSHD_PAM_INIT           debug1: PAM: initializing for "%{USERNAME:user.name}"
+SSHD_PAM_CLIENT         debug1: PAM: setting PAM_RHOST to "%{IP:client.ip}"
+SSHD_PAM_TTY            debug1: PAM: setting PAM_TTY to "%{WORD:sshd.tty}"
+
+# preauth %{SSHD_PREAUTH}
+SSHD_PREAUTH            (?:%{SSHD_DISC_PREAUTH}|%{SSHD_RECE_PREAUTH}|%{SSHD_MAXE_PREAUTH}|%{SSHD_DISR_PREAUTH}|%{SSHD_INVA_PREAUTH}|%{SSHD_REST_PREAUTH}|%{SSHD_CLOS_PREAUTH}|%{SSHD_FAIL_PREAUTH}|%{SSHD_FAI2_PREAUTH}|%{SSHD_BADL_PREAUTH})
+SSHD_DISC_PREAUTH       Disconnected from %{IP:client.ip} port %{POSINT:sshd.port}\s*(?:\[%{GREEDYDATA:sshd.privsep}\]|)
+SSHD_RECE_PREAUTH       Received disconnect from %{IP:client.ip} port %{POSINT:sshd.port}:%{NUMBER:sshd.disconnect.code}: %{GREEDYDATA:sshd.disconnect.status}? \[%{GREEDYDATA:sshd.privsep}\]
+SSHD_MAXE_PREAUTH       error: maximum authentication attempts exceeded for (?:invalid user |)%{USERNAME:user.name} from %{IP:client.ip} port %{POSINT:sshd.port} %{WORD:sshd.protocol}\s*(?:\[%{GREEDYDATA:sshd.privsep}\]|)
+SSHD_DISR_PREAUTH       Disconnecting: %{GREEDYDATA:sshd.disconnect.status} \[%{GREEDYDATA:sshd.privsep}\]
+SSHD_INVA_PREAUTH       input_userauth_request: invalid user %{USERNAME:user.name}?\s*(?:\[%{GREEDYDATA:sshd.privsep}\]|)
+SSHD_REST_PREAUTH       Connection reset by %{IP:client.ip} port %{POSINT:sshd.port}\s*(?:\[%{GREEDYDATA:sshd.privsep}\]|)
+SSHD_CLOS_PREAUTH       Connection closed by %{IP:client.ip} port %{POSINT:sshd.port}\s*(?:\[%{GREEDYDATA:sshd.privsep}\]|)
+SSHD_FAIL_PREAUTH       fatal: (?<sshd.fatal.status>Unable to negotiate) with %{IP:client.ip} port %{POSINT:sshd.port}:\s*%{GREEDYDATA:sshd.disconnect.status}? \[%{GREEDYDATA:sshd.privsep}\]
+SSHD_FAI2_PREAUTH       fatal: %{GREEDYDATA:sshd.fatal.status}: Connection from %{IP:client.ip} port %{POSINT:sshd.port}:\s*%{GREEDYDATA:sshd.disconnect.status}? \[%{GREEDYDATA:sshd.privsep}\]
+SSHD_BADL_PREAUTH       Bad packet length %{NUMBER:sshd.packetlength}. \[%{GREEDYDATA:sshd.privsep}\]
+
+# Errors and warnings %{SSHD_ERROR}
+SSHD_ERROR              (?:%{SSHD_IDENT_FAIL}|%{SSHD_MAPB_FAIL}|%{SSHD_RMAP_FAIL}|%{SSHD_TOOMANY_AUTH}|%{SSHD_CORRUPT_MAC}|%{SSHD_PACKET_CORRUPT}|%{SSHD_BAD_VERSION}|%{SSHD_PAM_FAIL}|%{SSHD_PAM_LOGOUT_ERR}|%{SSHD_TUNN_ERR1}|%{SSHD_TUNN_ERR2}|%{SSHD_TUNN_ERR3}|%{SSHD_TUNN_ERR4}|%{SSHD_TUNN_TIMEOUT}|%{SSHD_RECE_PREAUTH})
+SSHD_IDENT_FAIL         Did not receive identification string from %{IP:client.ip}
+SSHD_MAPB_FAIL          Address %{IP:client.ip} maps to %{HOSTNAME:client.domain}, but this does not map back to the address - POSSIBLE BREAK-IN ATTEMPT!
+SSHD_RMAP_FAIL          reverse mapping checking getaddrinfo for %{HOSTNAME:client.domain} \[%{IP:client.ip}\] failed - POSSIBLE BREAK-IN ATTEMPT!
+SSHD_TOOMANY_AUTH       Disconnecting: Too many authentication failures for %{USERNAME:user.name}
+SSHD_CORRUPT_MAC        Corrupted MAC on input
+SSHD_PACKET_CORRUPT     Disconnecting: Packet corrupt
+SSHD_BAD_VERSION        Bad protocol version identification '%{GREEDYDATA:sshd.protocol}' from %{IP:client.ip} port(?: %{POSINT:sshd.port}|)
+SSHD_PAM_FAIL           pam_systemd\(sshd:session\): Failed to release session: %{GREEDYDATA:sshd.disconnect.fail}
+SSHD_PAM_LOGOUT_ERR     syslogin_perform_logout: logout\(\) returned an error
+SSHD_TUNN_ERR1          error: connect_to %{IP:sshd.listen.ip} port %{NUMBER:sshd.listen.port}: failed.
+SSHD_TUNN_ERR2          error: channel_setup_fwd_listener: cannot listen to port: %{NUMBER:sshd.listen.port}
+SSHD_TUNN_ERR3          error: bind: Address already in use
+SSHD_TUNN_ERR4          error: channel_setup_fwd_listener_tcpip: cannot listen to port: %{NUMBER:sshd.listen.port}
+SSHD_TUNN_TIMEOUT       Timeout, client not responding.
+SSHD_REFUSE_CONN        (?<sshd.authentication.result>refused) connect from %{DATA:client.domain} \(%{IP:client.ip}\)
+SSHD_TCPWRAP_FAIL1      warning: %{DATA:sshd.tcpdfile}, line %{NUMBER}: can't verify hostname: getaddrinfo\(%{DATA:client.domain}, %{DATA:sshd.safamily}\) failed
+SSHD_TCPWRAP_FAIL2      warning: %{DATA:sshd.tcpdfile}, line %{NUMBER}: host name/address mismatch: %{IP:client.ip} != %{HOSTNAME:client.domain}
+SSHD_TCPWRAP_FAIL3      warning: %{DATA:sshd.tcpdfile}, line %{NUMBER}: host name/name mismatch: %{HOSTNAME:client.domain} != %{HOSTNAME:client.domain2}
+SSHD_TCPWRAP_FAIL4      warning: %{DATA:sshd.tcpdfile}, line %{NUMBER}: host name/name mismatch: reverse lookup results in non-FQDN %{HOSTNAME:client.domain}
+SSHD_TCPWRAP_FAIL5      warning: can't get client address: Connection reset by peer
+SSHD_RECE_PREAUTH       error: Received disconnect from %{IP:client.ip} port %{NUMBER:sshd.port}:%{NUMBER:sshd.disconnect.code}: %{GREEDYDATA:sshd.disconnect.status}? \[%{GREEDYDATA:sshd.privsep}\]
+
+# General
+SSHD_SYSLOG_HEAD        %{SYSLOGTIMESTAMP:timestamp} (?<event.provider>[\w-]+) %{WORD:process.name}\[%{POSINT:process.id}]:
+
+SSHD %{SSHD_SYSLOG_HEAD} (?:%{SSHD_INIT}|%{SSHD_AUTH}|%{SSHD_AUTH_FAILURE}|%{SSHD_SESSION}|%{SSHD_FILE}|%{SSHD_PAM}|%{SSHD_PREAUTH}|%{SSHD_ERROR})
