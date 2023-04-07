@@ -1,82 +1,82 @@
 # sshd grok patterns
 
 # Start/Stop %{SSHD_INIT}
-SSHD_INIT				(?:%{SSHD_SVC_LISTEN}|%{SSHD_SVC_TERMINATE})
+SSHD_INIT               (?:%{SSHD_SVC_LISTEN}|%{SSHD_SVC_TERMINATE})
 SSHD_SVC_LISTEN        	Server listening on %{IP:sshd__listen__ip} port %{POSINT:sshd__listen__port}.
-SSHD_SVC_TERMINATE     	Received signal %{NUMBER:sshd__signal}; terminating.
+SSHD_SVC_TERMINATE      Received signal %{NUMBER:sshd__signal}; terminating.
 
 # Authentication success messages %{SSHD_AUTH}
-SSHD_AUTH 				(?:%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS})
-SSHD_AUTH_REQUEST 		debug1: userauth-request for user %{USERNAME:user__name} service (?<service__name>[\w\d-]+) method %{WORD:sshd__authentication__method}(?:%{GREEDYDATA}|})
-SSHD_AUTH_STAT 			debug1: attempt %{NUMBER:sshd__authentication__attempt} failures %{NUMBER:sshd__authentication__failures}%{GREEDYDATA}
-SSHD_USER_GROUPS 		debug1: user %{USERNAME:user__name} matched group list (?<user__group__name>[\w,\d]+)%{GREEDYDATA}
+SSHD_AUTH               (?:%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS})
+SSHD_AUTH_REQUEST       debug1: userauth-request for user %{USERNAME:user__name} service (?<service__name>[\w\d-]+) method %{WORD:sshd__authentication__method}(?:%{GREEDYDATA}|})
+SSHD_AUTH_STAT          debug1: attempt %{NUMBER:sshd__authentication__attempt} failures %{NUMBER:sshd__authentication__failures}%{GREEDYDATA}
+SSHD_USER_GROUPS        debug1: user %{USERNAME:user__name} matched group list (?<user__group__name>[\w,\d]+)%{GREEDYDATA}
 
 # Authentication failure messages %{SSHD_AUTH_FAILURE}
-SSHD_AUTH_FAILURE		(?:%{SSHD_AUTH_FAIL}|%{SSHD_AUTH_BADPASSWORD}|%{SSHD_AUTH_INVALID_USER})
+SSHD_AUTH_FAILURE       (?:%{SSHD_AUTH_FAIL}|%{SSHD_AUTH_BADPASSWORD}|%{SSHD_AUTH_INVALID_USER})
 SSHD_AUTH_FAIL          (?<sshd__authentication__result>Failed) %{WORD:sshd__authentication__method} for %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}
-SSHD_AUTH_BADPASSWORD  	(?<sshd__authentication__result>Failed) (?<sshd__authentication__method>password) for invalid user %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}
+SSHD_AUTH_BADPASSWORD   (?<sshd__authentication__result>Failed) (?<sshd__authentication__method>password) for invalid user %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}
 SSHD_AUTH_INVALID_USER 	(?<sshd__authentication__result>Invalid user)\s*%{USERNAME:user__name}? from %{IP:client__ip}(?: port %{POSINT:client__port}|)
 
 # Session and connection messages %{SSHD_SESSION}
-SSHD_SESSION 			(?:%{SSHD_SESSION_ACCEPT}|%{SSHD_SESSION_CLOSED}|%{SSHD_SESSION_CLOSED2}|%{SSHD_CONN_CLOSING}|%{SSHD_CONN_CLOSED}|%{SSHD_SESSION_XFER_BYTES}|%{SSHD_SESSION_PAM_OPEN}|%{SSHD_SESSION_PAM_CLOSE})
-SSHD_SESSION_ACCEPT		(?<sshd__authentication__result>Accepted) %{WORD:sshd__authentication__method} for %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}: %{GREEDYDATA:sshd__cipher}
-SSHD_SESSION_CLOSED 	session closed for local user %{USERNAME:user__name} from \[%{IP:client__ip}]%{GREEDYDATA}
-SSHD_SESSION_CLOSED2	Close session: user %{USERNAME:user__name} from %{IP:client__ip} port %{POSINT:sshd__port}%{GREEDYDATA} id %{NUMBER:sshd__channel}%{GREEDYDATA}
+SSHD_SESSION            (?:%{SSHD_SESSION_ACCEPT}|%{SSHD_SESSION_CLOSED}|%{SSHD_SESSION_CLOSED2}|%{SSHD_CONN_CLOSING}|%{SSHD_CONN_CLOSED}|%{SSHD_SESSION_XFER_BYTES}|%{SSHD_SESSION_PAM_OPEN}|%{SSHD_SESSION_PAM_CLOSE})
+SSHD_SESSION_ACCEPT     (?<sshd__authentication__result>Accepted) %{WORD:sshd__authentication__method} for %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}: %{GREEDYDATA:sshd__cipher}
+SSHD_SESSION_CLOSED     session closed for local user %{USERNAME:user__name} from \[%{IP:client__ip}]%{GREEDYDATA}
+SSHD_SESSION_CLOSED2    Close session: user %{USERNAME:user__name} from %{IP:client__ip} port %{POSINT:sshd__port}%{GREEDYDATA} id %{NUMBER:sshd__channel}%{GREEDYDATA}
 SSHD_SESSION_XFER_BYTES Transferred: sent %{NUMBER:sshd__sentbytes}, received %{NUMBER:sshd__rcvdbytes}%{GREEDYDATA}	
 SSHD_SESSION_PAM_OPEN   pam_unix\(sshd:session\): session opened for user %{USERNAME:user__name} by \(uid=\d+\)
 SSHD_SESSION_PAM_CLOSE  pam_unix\(sshd:session\): session closed for user %{USERNAME:user__name}
-SSHD_CONN_CLOSING		Closing connection to %{IP:client__ip} port %{POSINT:sshd__port}%{GREEDYDATA}
-SSHD_CONN_CLOSED		Connection closed by %{IP:client__ip}(?: port %{POSINT:sshd__port}%{GREEDYDATA}|)
+SSHD_CONN_CLOSING       Closing connection to %{IP:client__ip} port %{POSINT:sshd__port}%{GREEDYDATA}
+SSHD_CONN_CLOSED        Connection closed by %{IP:client__ip}(?: port %{POSINT:sshd__port}%{GREEDYDATA}|)
 
 # File access %{SSHD_FILE}
-SSHD_FILE 				(?:%{SSHD_FILE_ACCESS}|%{SSHD_FILE_ACCESS_MSG})
-SSHD_FILE_ACCESS 		(?<file__access__action>[\w,]+) %{QUOTEDSTRING:file__path} flags %{WORD:file__access__type} mode (?<file__mode>[0-9]+)(?:%{GREEDYDATA}|})
-SSHD_FILE_ACCESS_MSG 	sent status %{GREEDYDATA:file__access__message}
+SSHD_FILE               (?:%{SSHD_FILE_ACCESS}|%{SSHD_FILE_ACCESS_MSG})
+SSHD_FILE_ACCESS        (?<file__access__action>[\w,]+) %{QUOTEDSTRING:file__path} flags %{WORD:file__access__type} mode (?<file__mode>[0-9]+)(?:%{GREEDYDATA}|})
+SSHD_FILE_ACCESS_MSG    sent status %{GREEDYDATA:file__access__message}
 
 # Other PAM messages %{SSHD_PAM}
-SSHD_PAM 				(?:%{SSHD_PAM_INIT}|%{SSHD_PAM_CLIENT}|%{SSHD_PAM_TTY})
-SSHD_PAM_INIT 			debug1: PAM: initializing for "%{USERNAME:user__name}"
-SSHD_PAM_CLIENT 		debug1: PAM: setting PAM_RHOST to "%{IP:client__ip}"
-SSHD_PAM_TTY 			debug1: PAM: setting PAM_TTY to "%{WORD:sshd__pam__tty}"
+SSHD_PAM                (?:%{SSHD_PAM_INIT}|%{SSHD_PAM_CLIENT}|%{SSHD_PAM_TTY})
+SSHD_PAM_INIT           debug1: PAM: initializing for "%{USERNAME:user__name}"
+SSHD_PAM_CLIENT         debug1: PAM: setting PAM_RHOST to "%{IP:client__ip}"
+SSHD_PAM_TTY            debug1: PAM: setting PAM_TTY to "%{WORD:sshd__pam__tty}"
 
 # preauth %{SSHD_PREAUTH}
-SSHD_PREAUTH			(?:%{SSHD_DISC_PREAUTH}|%{SSHD_RECE_PREAUTH}|%{SSHD_MAXE_PREAUTH}|%{SSHD_DISR_PREAUTH}|%{SSHD_INVA_PREAUTH}|%{SSHD_REST_PREAUTH}|%{SSHD_CLOS_PREAUTH}|%{SSHD_FAIL_PREAUTH}|%{SSHD_FAI2_PREAUTH}|%{SSHD_BADL_PREAUTH})
-SSHD_DISC_PREAUTH   	Disconnected from %{IP:client__ip} port %{POSINT:sshd__port}\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
-SSHD_RECE_PREAUTH   	Received disconnect from %{IP:client__ip} port %{POSINT:sshd__port}:%{NUMBER:sshd__disconnect__code}: %{GREEDYDATA:sshd__disconnect__status}? \[%{GREEDYDATA:sshd__privsep}\]
-SSHD_MAXE_PREAUTH   	error: maximum authentication attempts exceeded for (?:invalid user |)%{USERNAME:user__name} from %{IP:client__ip} port %{POSINT:sshd__port} %{WORD:sshd__protocol}\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
-SSHD_DISR_PREAUTH   	Disconnecting: %{GREEDYDATA:sshd__disconnect__status} \[%{GREEDYDATA:sshd__privsep}\]
-SSHD_INVA_PREAUTH   	input_userauth_request: invalid user %{USERNAME:user__name}?\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
-SSHD_REST_PREAUTH   	Connection reset by %{IP:client__ip} port %{POSINT:sshd__port}\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
-SSHD_CLOS_PREAUTH   	Connection closed by %{IP:client__ip} port %{POSINT:sshd__port}\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
-SSHD_FAIL_PREAUTH   	fatal: Unable to negotiate with %{IP:client__ip} port %{POSINT:sshd__port}:\s*%{GREEDYDATA:sshd__disconnect__status}? \[%{GREEDYDATA:sshd__privsep}\]
-SSHD_FAI2_PREAUTH   	fatal: %{GREEDYDATA:sshd__fatal__status}: Connection from %{IP:client__ip} port %{POSINT:sshd__port}:\s*%{GREEDYDATA:sshd__disconnect__status}? \[%{GREEDYDATA:sshd__privsep}\]
-SSHD_BADL_PREAUTH   	Bad packet length %{NUMBER:sshd__packet__length}. \[%{GREEDYDATA:sshd__privsep}\]
+SSHD_PREAUTH            (?:%{SSHD_DISC_PREAUTH}|%{SSHD_RECE_PREAUTH}|%{SSHD_MAXE_PREAUTH}|%{SSHD_DISR_PREAUTH}|%{SSHD_INVA_PREAUTH}|%{SSHD_REST_PREAUTH}|%{SSHD_CLOS_PREAUTH}|%{SSHD_FAIL_PREAUTH}|%{SSHD_FAI2_PREAUTH}|%{SSHD_BADL_PREAUTH})
+SSHD_DISC_PREAUTH       Disconnected from %{IP:client__ip} port %{POSINT:sshd__port}\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
+SSHD_RECE_PREAUTH       Received disconnect from %{IP:client__ip} port %{POSINT:sshd__port}:%{NUMBER:sshd__disconnect__code}: %{GREEDYDATA:sshd__disconnect__status}? \[%{GREEDYDATA:sshd__privsep}\]
+SSHD_MAXE_PREAUTH       error: maximum authentication attempts exceeded for (?:invalid user |)%{USERNAME:user__name} from %{IP:client__ip} port %{POSINT:sshd__port} %{WORD:sshd__protocol}\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
+SSHD_DISR_PREAUTH       Disconnecting: %{GREEDYDATA:sshd__disconnect__status} \[%{GREEDYDATA:sshd__privsep}\]
+SSHD_INVA_PREAUTH       input_userauth_request: invalid user %{USERNAME:user__name}?\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
+SSHD_REST_PREAUTH       Connection reset by %{IP:client__ip} port %{POSINT:sshd__port}\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
+SSHD_CLOS_PREAUTH       Connection closed by %{IP:client__ip} port %{POSINT:sshd__port}\s*(?:\[%{GREEDYDATA:sshd__privsep}\]|)
+SSHD_FAIL_PREAUTH       fatal: Unable to negotiate with %{IP:client__ip} port %{POSINT:sshd__port}:\s*%{GREEDYDATA:sshd__disconnect__status}? \[%{GREEDYDATA:sshd__privsep}\]
+SSHD_FAI2_PREAUTH       fatal: %{GREEDYDATA:sshd__fatal__status}: Connection from %{IP:client__ip} port %{POSINT:sshd__port}:\s*%{GREEDYDATA:sshd__disconnect__status}? \[%{GREEDYDATA:sshd__privsep}\]
+SSHD_BADL_PREAUTH       Bad packet length %{NUMBER:sshd__packet__length}. \[%{GREEDYDATA:sshd__privsep}\]
 
 # Errors and warnings %{SSHD_ERROR}
-SSHD_ERROR 				(?:%{SSHD_IDENT_FAIL}|%{SSHD_MAPB_FAIL}|%{SSHD_RMAP_FAIL}|%{SSHD_TOOMANY_AUTH}|%{SSHD_CORRUPT_MAC}|%{SSHD_PACKET_CORRUPT}|%{SSHD_BAD_VERSION}|%{SSHD_PAM_FAIL}|%{SSHD_PAM_LOGOUT_ERR}|%{SSHD_TUNN_ERR1}|%{SSHD_TUNN_ERR2}|%{SSHD_TUNN_ERR3}|%{SSHD_TUNN_ERR4}|%{SSHD_TUNN_TIMEOUT}|%{SSHD_RECE_PREAUTH})
-SSHD_IDENT_FAIL     	Did not receive identification string from %{IP:client__ip}
-SSHD_MAPB_FAIL      	Address %{IP:client__ip} maps to %{HOSTNAME:client__domain}, but this does not map back to the address - POSSIBLE BREAK-IN ATTEMPT!
-SSHD_RMAP_FAIL      	reverse mapping checking getaddrinfo for %{HOSTNAME:client__domain} \[%{IP:client__ip}\] failed - POSSIBLE BREAK-IN ATTEMPT!
-SSHD_TOOMANY_AUTH   	Disconnecting: Too many authentication failures for %{USERNAME:client__user}
-SSHD_CORRUPT_MAC    	Corrupted MAC on input
-SSHD_PACKET_CORRUPT 	Disconnecting: Packet corrupt
-SSHD_BAD_VERSION    	Bad protocol version identification '%{GREEDYDATA:sshd__protocol}' from %{IP:client__ip} port(?: %{POSINT:client__port}|)
-SSHD_PAM_FAIL   		pam_systemd\(sshd:session\): Failed to release session: %{GREEDYDATA:sshd__disconnect__fail}
+SSHD_ERROR              (?:%{SSHD_IDENT_FAIL}|%{SSHD_MAPB_FAIL}|%{SSHD_RMAP_FAIL}|%{SSHD_TOOMANY_AUTH}|%{SSHD_CORRUPT_MAC}|%{SSHD_PACKET_CORRUPT}|%{SSHD_BAD_VERSION}|%{SSHD_PAM_FAIL}|%{SSHD_PAM_LOGOUT_ERR}|%{SSHD_TUNN_ERR1}|%{SSHD_TUNN_ERR2}|%{SSHD_TUNN_ERR3}|%{SSHD_TUNN_ERR4}|%{SSHD_TUNN_TIMEOUT}|%{SSHD_RECE_PREAUTH})
+SSHD_IDENT_FAIL         Did not receive identification string from %{IP:client__ip}
+SSHD_MAPB_FAIL          Address %{IP:client__ip} maps to %{HOSTNAME:client__domain}, but this does not map back to the address - POSSIBLE BREAK-IN ATTEMPT!
+SSHD_RMAP_FAIL          reverse mapping checking getaddrinfo for %{HOSTNAME:client__domain} \[%{IP:client__ip}\] failed - POSSIBLE BREAK-IN ATTEMPT!
+SSHD_TOOMANY_AUTH       Disconnecting: Too many authentication failures for %{USERNAME:client__user}
+SSHD_CORRUPT_MAC        Corrupted MAC on input
+SSHD_PACKET_CORRUPT     Disconnecting: Packet corrupt
+SSHD_BAD_VERSION        Bad protocol version identification '%{GREEDYDATA:sshd__protocol}' from %{IP:client__ip} port(?: %{POSINT:client__port}|)
+SSHD_PAM_FAIL           pam_systemd\(sshd:session\): Failed to release session: %{GREEDYDATA:sshd__disconnect__fail}
 SSHD_PAM_LOGOUT_ERR     syslogin_perform_logout: logout\(\) returned an error
-SSHD_TUNN_ERR1      	error: connect_to %{IP:sshd__listen__ip} port %{NUMBER:sshd__listen__port}: failed.
-SSHD_TUNN_ERR2      	error: channel_setup_fwd_listener: cannot listen to port: %{NUMBER:sshd__listen__port}
-SSHD_TUNN_ERR3      	error: bind: Address already in use
-SSHD_TUNN_ERR4      	error: channel_setup_fwd_listener_tcpip: cannot listen to port: %{NUMBER:sshd__listen__port}
-SSHD_TUNN_TIMEOUT   	Timeout, client not responding.
-SSHD_REFUSE_CONN    	(?<sshd__auth__result>refused) connect from %{DATA:client__domain} \(%{IP:client__ip}\)
-SSHD_TCPWRAP_FAIL1  	warning: %{DATA:sshd__tcpd__file}, line %{NUMBER}: can't verify hostname: getaddrinfo\(%{DATA:client__domain}, %{DATA:sshd__sa__family}\) failed
-SSHD_TCPWRAP_FAIL2  	warning: %{DATA:sshd__tcpd__file}, line %{NUMBER}: host name/address mismatch: %{IP:client__ip} != %{HOSTNAME:client__domain}
-SSHD_TCPWRAP_FAIL3  	warning: %{DATA:sshd__tcpd__file}, line %{NUMBER}: host name/name mismatch: %{HOSTNAME:client__domain} != %{HOSTNAME:client__domain2}
-SSHD_TCPWRAP_FAIL4  	warning: %{DATA:sshd__tcpd__file}, line %{NUMBER}: host name/name mismatch: reverse lookup results in non-FQDN %{HOSTNAME:client__domain}
-SSHD_TCPWRAP_FAIL5  	warning: can't get client address: Connection reset by peer
-SSHD_RECE_PREAUTH   	error: Received disconnect from %{IP:client__ip} port %{NUMBER:sshd__port}:%{NUMBER:sshd__disconnect__code}: %{GREEDYDATA:sshd__disconnect__status}? \[%{GREEDYDATA:sshd__privsep}\]
+SSHD_TUNN_ERR1          error: connect_to %{IP:sshd__listen__ip} port %{NUMBER:sshd__listen__port}: failed.
+SSHD_TUNN_ERR2          error: channel_setup_fwd_listener: cannot listen to port: %{NUMBER:sshd__listen__port}
+SSHD_TUNN_ERR3          error: bind: Address already in use
+SSHD_TUNN_ERR4          error: channel_setup_fwd_listener_tcpip: cannot listen to port: %{NUMBER:sshd__listen__port}
+SSHD_TUNN_TIMEOUT       Timeout, client not responding.
+SSHD_REFUSE_CONN        (?<sshd__auth__result>refused) connect from %{DATA:client__domain} \(%{IP:client__ip}\)
+SSHD_TCPWRAP_FAIL1      warning: %{DATA:sshd__tcpd__file}, line %{NUMBER}: can't verify hostname: getaddrinfo\(%{DATA:client__domain}, %{DATA:sshd__sa__family}\) failed
+SSHD_TCPWRAP_FAIL2      warning: %{DATA:sshd__tcpd__file}, line %{NUMBER}: host name/address mismatch: %{IP:client__ip} != %{HOSTNAME:client__domain}
+SSHD_TCPWRAP_FAIL3      warning: %{DATA:sshd__tcpd__file}, line %{NUMBER}: host name/name mismatch: %{HOSTNAME:client__domain} != %{HOSTNAME:client__domain2}
+SSHD_TCPWRAP_FAIL4      warning: %{DATA:sshd__tcpd__file}, line %{NUMBER}: host name/name mismatch: reverse lookup results in non-FQDN %{HOSTNAME:client__domain}
+SSHD_TCPWRAP_FAIL5      warning: can't get client address: Connection reset by peer
+SSHD_RECE_PREAUTH       error: Received disconnect from %{IP:client__ip} port %{NUMBER:sshd__port}:%{NUMBER:sshd__disconnect__code}: %{GREEDYDATA:sshd__disconnect__status}? \[%{GREEDYDATA:sshd__privsep}\]
 
 # General
-SSHD_SYSLOG_HEAD 		%{SYSLOGTIMESTAMP:timestamp} (?<host__hostname>[\w-]+) %{WORD:process__name}\[%{POSINT:process__id}]:
+SSHD_SYSLOG_HEAD        %{SYSLOGTIMESTAMP:timestamp} (?<host__hostname>[\w-]+) %{WORD:process__name}\[%{POSINT:process__id}]:
 
 SSHD %{SSHD_SYSLOG_HEAD} (?:%{SSHD_INIT}|%{SSHD_AUTH}|%{SSHD_AUTH_FAILURE}|%{SSHD_SESSION}|%{SSHD_FILE}|%{SSHD_PAM}|%{SSHD_PREAUTH}|%{SSHD_ERROR})
