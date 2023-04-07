@@ -9,20 +9,20 @@ SSHD_SVC_TERMINATE     	Received signal %{NUMBER:sshd__signal}; terminating.
 SSHD_AUTH 				(?:%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS})
 SSHD_AUTH_REQUEST 		debug1: userauth-request for user %{USERNAME:user__name} service (?<service__name>[\w\d-]+) method %{WORD:sshd__authentication__method}(?:%{GREEDYDATA}|})
 SSHD_AUTH_STAT 			debug1: attempt %{NUMBER:sshd__authentication__attempt} failures %{NUMBER:sshd__authentication__failures}%{GREEDYDATA}
-SSHD_USER_GROUPS 		debug1: user %{USERNAME:user__name} matched group list (?<_tmp__user__groups>[\w,\d]+)%{GREEDYDATA}
+SSHD_USER_GROUPS 		debug1: user %{USERNAME:user__name} matched group list (?<user__group__name>[\w,\d]+)%{GREEDYDATA}
 
 # Authentication failure messages %{SSHD_AUTH_FAILURE}
 SSHD_AUTH_FAILURE		(?:%{SSHD_AUTH_FAIL}|%{SSHD_AUTH_BADPASSWORD}|%{SSHD_AUTH_INVALID_USER})
-SSHD_AUTH_FAIL          Failed %{WORD:sshd_auth_type} for %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}
-SSHD_AUTH_BADPASSWORD  	Failed password for invalid user %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}
-SSHD_AUTH_INVALID_USER 	Invalid user\s*%{USERNAME:user__name}? from %{IP:client__ip}(?: port %{POSINT:client__port}|)
+SSHD_AUTH_FAIL          (?<sshd__authentication__result>Failed) %{WORD:sshd__authentication__method} for %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}
+SSHD_AUTH_BADPASSWORD  	(?<sshd__authentication__result>Failed) (?<sshd__authentication__method>password) for invalid user %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}
+SSHD_AUTH_INVALID_USER 	(?<sshd__authentication__result>Invalid user)\s*%{USERNAME:user__name}? from %{IP:client__ip}(?: port %{POSINT:client__port}|)
 
 # Session and connection messages %{SSHD_SESSION}
 SSHD_SESSION 			(?:%{SSHD_SESSION_ACCEPT}|%{SSHD_SESSION_CLOSED}|%{SSHD_SESSION_CLOSED2}|%{SSHD_CONN_CLOSING}|%{SSHD_CONN_CLOSED}|%{SSHD_SESSION_XFER_BYTES}|%{SSHD_SESSION_PAM_OPEN}|%{SSHD_SESSION_PAM_CLOSE})
-SSHD_SESSION_ACCEPT		(?<sshd__auth__result>Accepted) %{WORD:sshd__auth__type} for %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}: %{GREEDYDATA:sshd_cipher}
+SSHD_SESSION_ACCEPT		(?<sshd__authentication__result>Accepted) %{WORD:sshd__authentication__method} for %{USERNAME:user__name} from %{IP:client__ip} port %{NUMBER:sshd__port} %{WORD:sshd__protocol}: %{GREEDYDATA:sshd__cipher}
 SSHD_SESSION_CLOSED 	session closed for local user %{USERNAME:user__name} from \[%{IP:client__ip}]%{GREEDYDATA}
-SSHD_SESSION_CLOSED2	Close session: user %{USERNAME:user__name} from %{IP:client__ip} port %{POSINT:sshd__port}%{GREEDYDATA} id %{NUMBER:ssh__channel}%{GREEDYDATA}
-SSHD_SESSION_XFER_BYTES Transferred: sent %{NUMBER:sshd__session__sent__bytes}, received %{NUMBER:sshd__session__rcvd__bytes}%{GREEDYDATA}	
+SSHD_SESSION_CLOSED2	Close session: user %{USERNAME:user__name} from %{IP:client__ip} port %{POSINT:sshd__port}%{GREEDYDATA} id %{NUMBER:sshd__channel}%{GREEDYDATA}
+SSHD_SESSION_XFER_BYTES Transferred: sent %{NUMBER:sshd__sentbytes}, received %{NUMBER:sshd__rcvdbytes}%{GREEDYDATA}	
 SSHD_SESSION_PAM_OPEN   pam_unix\(sshd:session\): session opened for user %{USERNAME:user__name} by \(uid=\d+\)
 SSHD_SESSION_PAM_CLOSE  pam_unix\(sshd:session\): session closed for user %{USERNAME:user__name}
 SSHD_CONN_CLOSING		Closing connection to %{IP:client__ip} port %{POSINT:sshd__port}%{GREEDYDATA}
