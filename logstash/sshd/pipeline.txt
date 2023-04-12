@@ -115,14 +115,14 @@ filter {
         }
     }
     
-    # Check for a populated user field and get or set memcache accordingly
+    # Check for a populated user field and get or set memcached accordingly
     if [user][name] or [user][name] =~ /.*/ {
-        # Memcache doesn't handle objects well so flaten user.name to a regular
+        # Memcached doesn't handle objects well so flaten user.name to a regular
         # field....
         mutate {
             copy => { "[user][name]" => "_tmpusername" }
         }       
-        # Add key value pair to memcache
+        # Add key value pair to memcached
         memcached {
             hosts => ["localhost"]
             namespace => "sshd"
@@ -150,6 +150,8 @@ filter {
             add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcacheresult]}" }
         }
     }
+    #TODO - Updated event fields based on connection status
+    #TODO - Drop temp fields
 }
 
 output {
