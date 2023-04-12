@@ -145,8 +145,17 @@ filter {
                 "%{_tmptraceid}" => "[_tmpmemcachedresult]"
             }
         }
-        mutate {
-            add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcachedresult]}" }
+        
+        # If memcached returned a result, add the result to the temporary trace ID and create the trace ID nested field
+        if [_tmpmemcachedresult] or [_tmpmemcachedresult] =~ /.*/ {
+            mutate {
+                add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcachedresult]}" }
+            }
+        } else {
+            # Otherwise, just build the trace ID nested field from the temporary flat field
+            mutate {
+                copy => { "_tmptraceid" => "[trace][id]" }
+            }
         }
     }
     #TODO - Updated event fields based on connection status
