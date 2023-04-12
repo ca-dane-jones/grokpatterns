@@ -117,8 +117,7 @@ filter {
     
     # Check for a populated user field and get or set memcached accordingly
     if [user][name] or [user][name] =~ /.*/ {
-        # Memcached doesn't handle objects well so flaten user.name to a regular
-        # field....
+        # The memcached plugin doesn't handle objects well so flaten user.name to a regular field....
         mutate {
             copy => { "[user][name]" => "_tmpusername" }
         }       
