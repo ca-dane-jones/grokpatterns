@@ -160,6 +160,8 @@ filter {
     }
     #TODO - Updated event fields based on connection status
     #TODO - Drop temp fields
+    #TODO - Add authentication event.result fields
+    #TODO - General cleanup
 }
 
 output {
