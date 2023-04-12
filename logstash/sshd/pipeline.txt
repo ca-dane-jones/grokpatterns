@@ -1,0 +1,157 @@
+input {
+    file {
+        path => "/tmp/sftp/test.log"
+        start_position => "beginning"
+    }
+}
+filter {
+    mutate {
+        add_field => {
+            "[ecs][version]" => "8.6.0"
+        }
+    }
+    mutate {
+        add_field => {
+            "[event][kind]" => "event"
+        }
+    }
+    mutate {
+        add_field => {
+            "[event][category]" => "session"
+        }
+    }
+    mutate {
+        add_field => {
+            "[event][type]" => "info"
+        }
+    }
+    mutate {
+        add_field => {
+            "[event][timezone]" => "America/Chicago"
+        }
+    }
+    grok {
+        patterns_dir => ["./patterns"]
+        match => { "message" => "%{SYSLOGTIMESTAMP:[_tmp][timestamp]} (?<[log][syslog][hostname]>[\w-]+) %{WORD:[process][name]}\[%{POSINT:[process][id]}]: %{GREEDYDATA:[_tmp][message]}" }
+    }
+    date {
+        locale => "en"
+        timezone => "%{[event][timezone]}"
+        match => [ "[_tmp][timestamp]",
+            "MMM dd HH:mm:ss",
+            "MMM  d HH:mm:ss",
+            "MMM d  HH:mm:ss" ]
+        target => "@timestamp"
+        tag_on_failure => [ "date-parse-failure" ]
+    }
+    mutate {
+        copy => { "[process][name]" => "[event][provider]" }
+    }
+    mutate {
+        copy => { "[process][name]" => "[log][syslog][appname]" }
+    }
+    mutate {
+        copy => { "[process][id]" => "[log][syslog][procid]" }
+    }
+    mutate {
+        add_field => {
+            "_tmptraceid" => "%{[log][syslog][hostname]}:%{[process][id]}"
+        }
+    }
+    grok {
+        patterns_dir => ["./patterns"]
+        match => { 
+            "message" => [
+                "(?:%{SSHD_SVC_LISTEN}|%{SSHD_SVC_TERMINATE})",
+                "(?:%{SSHD_SESSION_ACCEPT}|%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS}|%{SSHD_AUTH_POSTPONED})",
+                "(?:%{SSHD_AUTH_FAIL}|%{SSHD_AUTH_INVALID_USER})",
+                "(?:%{SSHD_SFTP_SESS_OPEN}|%{SSHD_SESSION_ACTION}|%{SSHD_SESSION_CLOSED2}|%{SSHD_CONN_CLOSING}|%{SSHD_CONN_CLOSED}|%{SSHD_SESSION_XFER_BYTES}|%{SSHD_SESSION_PAM_OPEN}|%{SSHD_SESSION_PAM_CLOSE}|%{SSHD_CONN_OPEN})",
+                "(?:%{SSHD_FILE_ACCESS}|%{SSHD_FILE_ACCESS_MSG})",
+                "(?:%{SSHD_PAM_INIT}|%{SSHD_PAM_CLIENT}|%{SSHD_PAM_TTY})",
+                "(?:%{SSHD_DISC_PREAUTH}|%{SSHD_RECE_PREAUTH}|%{SSHD_MAXE_PREAUTH}|%{SSHD_DISR_PREAUTH}|%{SSHD_INVA_PREAUTH}|%{SSHD_REST_PREAUTH}|%{SSHD_CLOS_PREAUTH}|%{SSHD_FAIL_PREAUTH}|%{SSHD_FAI2_PREAUTH}|%{SSHD_BADL_PREAUTH})",
+                "(?:%{SSHD_IDENT_FAIL}|%{SSHD_MAPB_FAIL}|%{SSHD_RMAP_FAIL}|%{SSHD_TOOMANY_AUTH}|%{SSHD_CORRUPT_MAC}|%{SSHD_PACKET_CORRUPT}|%{SSHD_BAD_VERSION}|%{SSHD_PAM_FAIL}|%{SSHD_PAM_LOGOUT_ERR}|%{SSHD_TUNN_ERR1}|%{SSHD_TUNN_ERR2}|%{SSHD_TUNN_ERR3}|%{SSHD_TUNN_ERR4}|%{SSHD_TUNN_TIMEOUT}|%{SSHD_RECE_PREAUTH})"
+            ]
+        }
+    }
+
+    # Process client geo IP information
+    if [client][ip] or [client][ip] =~ /.*/ {
+        geoip {
+            default_database_type => "City"
+            source => "[client][ip]"
+            target => "[client][geo]"
+     		tag_on_failure => ["geoip-city-failed"]       
+        }
+        geoip {
+            default_database_type => "ASN"
+            source => "[client][ip]"
+            target => "[client][geo]"
+     		tag_on_failure => ["geoip-asn-failed"]       
+        }
+        mutate {
+            rename => { "[client][as][organization_name]" => "[client][as][organization][name]" }
+        }
+    }
+
+    mutate {
+        lowercase => [ "[sshd][authentication][result]" ]
+    }
+
+    # Split group name string into an array
+    mutate {
+         split => { "[user][group][name]" => "," }
+    }
+    
+    if [sshd][authentication][result] == "accepted" {
+        mutate {
+            add_field => { "[event][category]" => "authentication" }
+            add_field => { "[event][outcome]" => "success" }
+        }
+    }
+    if [sshd][authentication][result] == "invalid user" or [sshd][authentication][result] == "failed" {
+        mutate {
+            add_field => { "[event][category]" => "authentication" }            
+            add_field => { "[event][outcome]" => "failure" }
+        }
+    }
+    
+    # Check for a populated user field and get or set memcache accordingly
+    if [user][name] or [user][name] =~ /.*/ {
+        # Memcache doesn't handle objects well so flaten user.name to a regular
+        # field....
+        mutate {
+            copy => { "[user][name]" => "_tmpusername" }
+        }       
+        # Add key value pair to memcache
+        memcached {
+            hosts => ["localhost"]
+            namespace => "sshd"
+            tag_on_failure => "memcache-set_trace_id-failed"
+            ttl => 1800
+            set => {
+                "[_tmpusername]" => "%{_tmptraceid}"
+            }
+            # "%{[user][name]}" => "%{_tmptraceid}"
+        }
+        # Create trace ID
+        mutate {
+            add_field => { "[trace][id]" => "%{_tmptraceid}:%{[user][name]}" } 
+        }
+    } else {
+        memcached {
+            hosts => ["localhost"]
+            namespace => "sshd"
+            tag_on_failure => "memcache-get_trace_id-failed"
+            get => {
+                "%{_tmptraceid}" => "[_tmpmemcacheresult]"
+            }
+        }
+        mutate {
+            add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcacheresult]}" }
+        }
+    }
+}
+
+output {
+    stdout { }
+}
