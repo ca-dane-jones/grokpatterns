@@ -126,7 +126,7 @@ filter {
         memcached {
             hosts => ["localhost"]
             namespace => "sshd"
-            tag_on_failure => "memcache-set_trace_id-failed"
+            tag_on_failure => "memcached-set_trace_id-failed"
             ttl => 1800
             set => {
                 "[_tmpusername]" => "%{_tmptraceid}"
@@ -141,13 +141,13 @@ filter {
         memcached {
             hosts => ["localhost"]
             namespace => "sshd"
-            tag_on_failure => "memcache-get_trace_id-failed"
+            tag_on_failure => "memcached-get_trace_id-failed"
             get => {
-                "%{_tmptraceid}" => "[_tmpmemcacheresult]"
+                "%{_tmptraceid}" => "[_tmpmemcachedresult]"
             }
         }
         mutate {
-            add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcacheresult]}" }
+            add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcachedresult]}" }
         }
     }
     #TODO - Updated event fields based on connection status
