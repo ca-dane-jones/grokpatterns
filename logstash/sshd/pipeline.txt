@@ -58,6 +58,9 @@ filter {
             "_tmptraceid" => "%{[log][syslog][hostname]}:%{[process][id]}"
         }
     }
+
+    # Messege parsing -- depends on the presense of grok patterns defined in
+    # sshd.txt located in the ./patterns directory
     grok {
         patterns_dir => ["./patterns"]
         match => { 
@@ -76,25 +79,27 @@ filter {
 
     # Process client geo IP information
     if [client][ip] or [client][ip] =~ /.*/ {
+        
+        # Get city based GeoIP details
         geoip {
             default_database_type => "City"
             source => "[client][ip]"
             target => "[client][geo]"
      		tag_on_failure => ["geoip-city-failed"]       
         }
+        
+        # Get ASN details such as organization name
         geoip {
             default_database_type => "ASN"
             source => "[client][ip]"
             target => "[client][geo]"
      		tag_on_failure => ["geoip-asn-failed"]       
         }
+
+        # Rename the ASN organization_name field for proper mapping to ECS
         mutate {
             rename => { "[client][as][organization_name]" => "[client][as][organization][name]" }
         }
-    }
-
-    mutate {
-        lowercase => [ "[sshd][authentication][result]" ]
     }
 
     # Split group name string into an array
@@ -102,25 +107,54 @@ filter {
          split => { "[user][group][name]" => "," }
     }
     
-    if [sshd][authentication][result] == "accepted" {
+
+    # Event Object - Authentication Events
+    if [sshd][authentication][result] or [sshd][authentication][result] =~ /.*/ {
+        
+        # Drop authentication result to lowercase for string sensitve processing
+        mutate {
+            lowercase => [ "[sshd][authentication][result]" ]
+        }    
+    
+        # Add authentication to the event.category object
         mutate {
             add_field => { "[event][category]" => "authentication" }
-            add_field => { "[event][outcome]" => "success" }
         }
-    }
-    if [sshd][authentication][result] == "invalid user" or [sshd][authentication][result] == "failed" {
-        mutate {
-            add_field => { "[event][category]" => "authentication" }            
-            add_field => { "[event][outcome]" => "failure" }
+
+        # Successful authentication
+        if [sshd][authentication][result] == "accepted" {
+            mutate {
+                add_field => { "[event][outcome]" => "success" }
+                add_field => { "[event][reason]" => "valid-%{[sshd][authentication][method]}" }
+            }
         }
+
+        # Failed authentication -- Invalid user
+        if [sshd][authentication][result] == "invalid user" {
+            mutate {
+                add_field => { "[event][outcome]" => "failure" }
+                add_field => { "[event][reason]" => "invalid-user" }
+            }
+        }
+
+        # Failed authentication -- Method (e.g. password, publikey)
+        if [sshd][authentication][result] == "failed" {
+            mutate {
+                add_field => { "[event][outcome]" => "failure" }
+                add_field => { "[event][reason]" => "invalid-%{[sshd][authentication][method]}" }
+            }
+        }       
     }
-    
-    # Check for a populated user field and get or set memcached accordingly
+
+    # Set this event's transaction ID. 
+    # TODO: Document me
     if [user][name] or [user][name] =~ /.*/ {
-        # The memcached plugin doesn't handle objects well so flaten user.name to a regular field....
+       
+         # The memcached plugin doesn't handle objects well so flaten user.name to a regular field....
         mutate {
             copy => { "[user][name]" => "_tmpusername" }
         }       
+        
         # Add key value pair to memcached
         memcached {
             hosts => ["localhost"]
@@ -132,11 +166,15 @@ filter {
             }
             # "%{[user][name]}" => "%{_tmptraceid}"
         }
+        
         # Create trace ID
         mutate {
             add_field => { "[trace][id]" => "%{_tmptraceid}:%{[user][name]}" } 
         }
+
     } else {
+        
+        # Perform lookup for user.id against memcached
         memcached {
             hosts => ["localhost"]
             namespace => "sshd"
@@ -151,7 +189,9 @@ filter {
             mutate {
                 add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcachedresult]}" }
             }
+
         } else {
+
             # Otherwise, just build the trace ID nested field from the temporary flat field
             mutate {
                 copy => { "_tmptraceid" => "[trace][id]" }
@@ -160,8 +200,8 @@ filter {
     }
     #TODO - Updated event fields based on connection status
     #TODO - Drop temp fields
-    #TODO - Add authentication event.result fields
     #TODO - General cleanup
+    #TODO - Record pipeline processing/execution time
 }
 
 output {
