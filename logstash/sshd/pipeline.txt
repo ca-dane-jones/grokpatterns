@@ -69,7 +69,7 @@ filter {
                 "(?:%{SSHD_SESSION_ACCEPT}|%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS}|%{SSHD_AUTH_POSTPONED})",
                 "(?:%{SSHD_AUTH_FAIL}|%{SSHD_AUTH_INVALID_USER})",
                 "(?:%{SSHD_SFTP_SESS_OPEN}|%{SSHD_SESSION_ACTION}|%{SSHD_SESSION_CLOSED2}|%{SSHD_CONN_CLOSING}|%{SSHD_CONN_CLOSED}|%{SSHD_SESSION_XFER_BYTES}|%{SSHD_SESSION_PAM_OPEN}|%{SSHD_SESSION_PAM_CLOSE}|%{SSHD_CONN_OPEN})",
-                "(?:%{SSHD_FILE_ACCESS}|%{SSHD_FILE_ACCESS_MSG})",
+                "(?:%{SSHD_FILE_ACCESS}",
                 "(?:%{SSHD_PAM_INIT}|%{SSHD_PAM_CLIENT}|%{SSHD_PAM_TTY})",
                 "(?:%{SSHD_DISC_PREAUTH}|%{SSHD_RECE_PREAUTH}|%{SSHD_MAXE_PREAUTH}|%{SSHD_DISR_PREAUTH}|%{SSHD_INVA_PREAUTH}|%{SSHD_REST_PREAUTH}|%{SSHD_CLOS_PREAUTH}|%{SSHD_FAIL_PREAUTH}|%{SSHD_FAI2_PREAUTH}|%{SSHD_BADL_PREAUTH})",
                 "(?:%{SSHD_IDENT_FAIL}|%{SSHD_MAPB_FAIL}|%{SSHD_RMAP_FAIL}|%{SSHD_TOOMANY_AUTH}|%{SSHD_CORRUPT_MAC}|%{SSHD_PACKET_CORRUPT}|%{SSHD_BAD_VERSION}|%{SSHD_PAM_FAIL}|%{SSHD_PAM_LOGOUT_ERR}|%{SSHD_TUNN_ERR1}|%{SSHD_TUNN_ERR2}|%{SSHD_TUNN_ERR3}|%{SSHD_TUNN_ERR4}|%{SSHD_TUNN_TIMEOUT}|%{SSHD_RECE_PREAUTH})"
@@ -107,6 +107,17 @@ filter {
          split => { "[user][group][name]" => "," }
     }
     
+    # File events
+    mutate {
+        lowercase => [ "[file][access][type]" ]
+        # Convert file access type to array for multimode access types (e.g. write,create)
+        split => { "[file][access][type]" => "," }
+    }
+    if [file][access][type] == "written" {
+        mutate {
+            replace => { "[file][action][type]" => "write" }
+        }
+    }
 
     # Event Object - Authentication Events
     if [sshd][authentication][result] or [sshd][authentication][result] =~ /.*/ {
