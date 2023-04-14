@@ -1,6 +1,6 @@
 ################################################################################
 # Logstash Pipeline for SSHD syslog events
-#   version: 1.0.17
+#   version: 1.0.25
 #   date: 2023-04-14
 #
 # TODO - Process disconnect events (event object info)
@@ -8,6 +8,7 @@
 # TODO - Updated event fields based on connection status
 # TODO - General cleanup
 # TODO - Move file access events to ECS event object framework
+# TODO - Check to see if rename file actions also apply to directories
 ################################################################################
 input {
     file {
@@ -15,12 +16,12 @@ input {
         start_position => "beginning"
     }
 }
-filter {
 
-    alter {
-        add_field => {
-            "[@metadata][now]" => "%{+YYYY.MM.dd.ss:SSS}"
-        }
+filter {
+    
+    # Put current timestamp into a temporary field for use later
+    ruby { 
+        code => "event.set('_tmpfilterstart', Time.now());" 
     }
 
     # Add event base fields
@@ -28,7 +29,7 @@ filter {
         add_field => { 
             "[ecs][version]" => "8.6.0" }
         add_field => {
-            "[event][created]" => "%{[@metadata][now]}" }
+            "[event][created]" => "%{[_tmpfilterstart]}" }
         add_field => { 
             "[event][kind]" => "event" }
         add_field => { 
@@ -43,7 +44,7 @@ filter {
     # Extract syslog header and message parts from full log string
     grok {
         patterns_dir => ["./patterns"]
-        match => { "message" => "%{SYSLOGTIMESTAMP:[_tmp][timestamp]} (?<[log][syslog][hostname]>[\w-]+) %{WORD:[process][name]}\[%{POSINT:[process][pid]}]: %{GREEDYDATA:[_tmp][message]}" }
+        match => { "message" => "%{SSHD_SYSLOG_HEAD} %{GREEDYDATA:[_tmp][message]}" }
         tag_on_failure => ["grok-syslog-failed"]
     }
 
@@ -51,7 +52,7 @@ filter {
     date {
         locale => "en"
         timezone => "%{[event][timezone]}"
-        match => [ "[_tmp][timestamp]",
+        match => [ "[_tmptimestamp]",
             "MMM dd HH:mm:ss",
             "MMM  d HH:mm:ss",
             "MMM d  HH:mm:ss" ]
@@ -137,64 +138,132 @@ filter {
         }
     }
     
+    
     # File events
-    if [file][access][action] or [file][acesss][action] {
+    if [_tmpfiletype] or [_tmpfiletype] =~ /.*/ {
         
-        # Add "file" to the event category
+        # Add "file" to the event category and "allowed" to the event type
         mutate {
             add_field => { "[event][category]" => "file" }
-        }
-
-        if [file][access][type] or [file][access][type] =~ /.*/ {
-            
-            # Drop file access type to lowercase for string comparisons
-            mutate {
-                lowercase => [ "[file][access][type]" ]
-            }
-            
-            # Replace the phrase "written" with the phrase "write" for search term nomalization
-            mutate {
-                gsub => [ 
-                    "[file][access][type]", "written", "write" ]
-            }
-            
-            # Split the access type string into an array
-            mutate {
-                # Convert file access type to array for multimode access types (e.g. write,create)
-                split => { "[file][access][type]" => "," }
-            }
+            add_field => { "[event][type]" => "allowed" }
         }
         
-        # Add file access types to events that don't contain specific types in their log strings
-        if "posix-rename" in [file][access][action] or "rename" in [file][access][action] {
+        if [_tmpfileaction] or [_tmpfileaction] =~ /.*/ {
+            # Drop file access action to lowercase for string comparisons
             mutate {
-                add_field => { "[file][access][type]" => "rename" }
+                lowercase => [ "[_tmpfileaction]" ]
+            }
+            
+            # Split the access action string into an array
+            mutate {
+                # Convert file action to array for multimode access types (e.g. write,create)
+                split => { "[_tmpfileaction]" => "," }
             }
         }
-        if "mkdir" in [file][access][type] {
+
+        # Handle rename event (file renamed)
+        if [_tmpfiletype] == "posix-rename" or [_tmpfiletype] == "rename" {
             mutate {
-                add_field => { "[file][access][type]" => "create-dir" }
+                add_field => { "[event][type]" => "change" }
+                add_field => { "[event][action]" => "file-rename" }
+                add_field => { "[event][outcome]" => "success" }
+            }
+        } 
+
+        # Handle close event (file read)
+        else if [_tmpfiletype] == "close" and "read" in [_tmpfileaction] {
+            mutate {
+                add_field => { "[event][type]" => "access" }
+                add_field => { "[event][action]" => "file-read" }
+                add_field => { "[event][outcome]" => "success" }
             }
         }
-        if "opendir" in [file][access][type] {
+
+        # Handle close event (file write)
+        else if [_tmpfiletype] == "close" and "written" in [_tmpfileaction] {
             mutate {
-                add_field => { "[file][access][type]" => "open-dir" }
+                add_field => { "[event][type]" => "change" }
+                add_field => { "[event][action]" => "file-write" }
+                add_field => { "[event][outcome]" => "success" }
             }
         }
-        if "closedir" in [file][access][type] {
+
+        # Handle mkdir event (directory create)
+        else if [_tmpfiletype] == "mkdir" {
             mutate {
-                add_field => { "[file][access][type]" => "close-dir" }
+                add_field => { "[event][type]" => "creation" }
+                add_field => { "[event][action]" => "directory-create" }
+                add_field => { "[event][outcome]" => "success" }
             }
         }
-        if "remove" in [file][access][type] {
+
+        # Handle open event (file opened for read)
+        else if [_tmpfiletype] == "open" and "read" in [_tmpfileaction]  {
             mutate {
-                add_field => { "[file][access][type]" => "delete" }
+                add_field => { "[event][type]" => "access" }
+                add_field => { "[event][action]" => "file-read" }
+                add_field => { "[event][outcome]" => "unknown" }
+            }
+        }
+
+        # Handle open event (file creation)
+        else if [_tmpfiletype] == "open" and "create" in [_tmpfileaction]  {
+            mutate {
+                add_field => { "[event][type]" => "creation" }
+                add_field => { "[event][action]" => "file-create" }
+                add_field => { "[event][outcome]" => "unknown" }
+                copy => { "[_tmpfileaction]" => "[event][reason]" }
+            }
+        }
+
+        # Handle open event (write only)
+        else if [_tmpfiletype] == "open" and "write" in [_tmpfileaction] and "create" not in [_tmpfileaction]  {
+            mutate {
+                add_field => { "[event][type]" => "change" }
+                add_field => { "[event][action]" => "file-write" }
+                add_field => { "[event][outcome]" => "unknown" }
+                copy => { "[_tmpfileaction]" => "[event][reason]" }
+            }
+        }
+
+        # Handle open directory event
+        else if [_tmpfiletype] == "opendir" {
+            mutate {
+                add_field => { "[event][type]" => "access" }
+                add_field => { "[event][action]" => "directory-open" }
+                add_field => { "[event][outcome]" => "success" }
+            }
+        }
+
+        # Handle close directory event
+        else if [_tmpfiletype] == "closedir" {
+            mutate {
+                add_field => { "[event][type]" => "access" }
+                add_field => { "[event][action]" => "directory-closed" }
+                add_field => { "[event][outcome]" => "success" }
+            }
+        }
+
+        # Handle file/directory removed event
+        else if [_tmpfiletype] == "set" {
+            mutate {
+                add_field => { "[event][type]" => "change" }
+                add_field => { "[event][action]" => "file-set" }
+                add_field => { "[event][outcome]" => "success" }
+            }
+        }
+
+        # Handle file/directory removed event
+        else if [_tmpfiletype] == "remove" {
+            mutate {
+                add_field => { "[event][type]" => "deletion" }
+                add_field => { "[event][action]" => "file-delete" }
+                add_field => { "[event][outcome]" => "success" }
             }
         }
     }
     
-
-    # Event Object - Authentication Events
+    # Authentication Events
     if [sshd][authentication][result] or [sshd][authentication][result] =~ /.*/ {
         
         # Drop authentication result to lowercase for string sensitve processing
@@ -210,7 +279,6 @@ filter {
         # Successful authentication - Record the authentication method and add session start to event info
         if [sshd][authentication][result] == "accepted" {
             mutate {
-                add_field => { "[event][type]" => "start" }
                 add_field => { "[event][type]" => "allowed" }
                 add_field => { "[event][outcome]" => "success" }
                 add_field => { "[event][reason]" => "valid-%{[sshd][authentication][method]}" }
@@ -254,12 +322,12 @@ filter {
             set => {
                 "[_tmpusername]" => "%{_tmptraceid}"
             }
-            # "%{[user][name]}" => "%{_tmptraceid}"
         }
         
-        # Create trace ID
+        # Create trace ID and update _tmptraceid because we'll need it later
         mutate {
-            add_field => { "[trace][id]" => "%{_tmptraceid}:%{[user][name]}" } 
+            add_field => { "[trace][id]" => "%{_tmptraceid}:%{[user][name]}" }
+            replace => { "%{_tmptraceid}" => "%{[trace][id]}" }
         }
 
     } else {
@@ -268,7 +336,7 @@ filter {
         memcached {
             hosts => ["localhost"]
             namespace => "sshd"
-            tag_on_failure => "memcached-get_trace_id-failed"
+            tag_on_failure => "memcached-gettraceid-failed"
             get => {
                 "%{_tmptraceid}" => "[_tmpmemcachedresult]"
             }
@@ -281,6 +349,7 @@ filter {
             mutate {
                 add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcachedresult]}" }
                 add_field => { "[user][name]" => "%{[_tmpmemcachedresult]}" }
+                replace => { "%{_tmptraceid}" => "%{[trace][id]}" }
             }
         
         } else {
@@ -292,18 +361,96 @@ filter {
         }
     }
 
+    # Session start events
+    if [_tmp][session_start] or [_tmp][session_start] =~ /.*/ {
+
+        # Make sure event category contains "session"
+        if "session" not in [event][category] {
+            mutate {
+                add_field => { "[event][category]" => "session" }
+            }
+        }
+
+        # Add start to event type
+        mutate {
+            add_field => { "[event][type]" => "start" }
+        }
+
+        # Add transaction ID and sesion start time to Memcached so that we can generate
+        # session elapsed time when we see a session end event
+        memcached {
+            hosts => ["localhost"]
+            namespace => "sshd-event"
+            tag_on_failure => "memcached-seteventstart-failed"
+            ttl => 1440
+            set => {
+                "[_tmptimestamp]" => "%{_tmptraceid}"
+            }
+        }
+    }
+
+    # Session end events
+    if [_tmp][session_end] or [_tmp][session_end] =~ /.*/ {
+    
+        # Make sure event category contains "session"
+        if "session" not in [event][category] {
+            mutate {
+                add_field => { "[event][category]" => "session" }
+            }
+        }
+
+        # Add end to event type
+        mutate {
+            add_field => { "[event][type]" => "end" }
+        }
+
+        # Retrieve event start time from memcached
+        memcached {
+            hosts => ["localhost"]
+            namespace => "sshd-event"
+            tag_on_failure => "memcached-geteventstart-failed"
+            get => {
+                "%{_tmptraceid}" => "[_tmpmemcachedeventstart]"
+            }
+        }
+        
+        # Calculate event duration
+        if [_tmpmemcachedeventstart] or [_tmpmemcachedeventstart] =~ /.*/ {
+            
+            # Calculate event duration
+            ruby {
+                code => "duration = 
+                    (DateTime.parse(event.get('_tmptimestamp')).to_time.to_f*1000 - DateTime.parse(event.get('_tmpmemcachedeventstart')).to_time.to_f*1000) rescue nil; 
+                    event.set('_tmpeventduration', duration); "
+            }
+
+            # If we were able to calculate the event duration, add the result to the event object
+            if [_tmpeventduration] or [_tmpeventduration] =~ /.*/ {
+                mutate {
+                    add_field => { "[event][duration]" => "%{_tmpeventduration}" }
+                }
+            }
+        }        
+    }
+
     # Remove temporary fields
     mutate {
         remove_field => [
             "_tmp",
+            "_tmpeventduration",
+            "_tmpfileaction",
+            "_tmpfiletype",
+            "_tmpfilterstart",
+            "_tmptimestamp",
             "_tmpmemcachedresult", 
+            "_tmpmemcachedeventstart",
             "_tmptraceid",
             "_tmpusername" ]
     }
 }
 
 output {
-    #stdout { }
+#    stdout { }
     elasticsearch{
         action => "create"
         data_stream => "true"
