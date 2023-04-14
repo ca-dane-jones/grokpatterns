@@ -1,6 +1,6 @@
 # sshd grok patterns for ECS
 # 	ECS Compatability: 8.6.0+
-# 	version: 1.0.17
+# 	version: 1.0.24
 # 	date: 2023-04-14
 
 # Start/Stop %{SSHD_INIT}
@@ -26,8 +26,8 @@ SSHD_SESSION            (?:%{SSHD_SFTP_SESS_OPEN}|%{SSHD_SESSION_ACTION}|%{SSHD_
 SSHD_SESSION_ACTION	    session %{WORD:[sshd][session][action]} for local user %{USERNAME:[user][name]} from \[%{IP:[client][ip]}](?: \[%{GREEDYDATA:[sshd][privsep]}\]|)
 SSHD_SESSION_CLOSED2    Close session: user %{USERNAME:[user][name]} from %{IP:[client][ip]} port %{POSINT:[client][port]}%{GREEDYDATA} id %{NUMBER:[sshd][channel]}%{GREEDYDATA}
 SSHD_SESSION_XFER_BYTES Transferred: sent %{NUMBER:[sshd][sentbytes]}, received %{NUMBER:[sshd][rcvdbytes]}%{GREEDYDATA}	
-SSHD_SESSION_PAM_OPEN   pam_unix\(sshd:session\): session opened for user %{USERNAME:[user][name]} by \(uid=\d+\)
-SSHD_SESSION_PAM_CLOSE  pam_unix\(sshd:session\): session closed for user %{USERNAME:[user][name]}
+SSHD_SESSION_PAM_OPEN   pam_unix\(sshd:session\): (?<[_tmp][session_start]>session opened) for user %{USERNAME:[user][name]} by \(uid=\d+\)
+SSHD_SESSION_PAM_CLOSE  pam_unix\(sshd:session\): (?<[_tmp][session_end]>session closed) for user %{USERNAME:[user][name]}
 SSHD_CONN_CLOSING       Closing connection to %{IP:[client][ip]} port %{POSINT:[client][port]}%{GREEDYDATA}
 SSHD_CONN_CLOSED        Connection closed by %{IP:[client][ip]}(?: port %{POSINT:[client][port]}%{GREEDYDATA}|)
 SSHD_CONN_OPEN		    Connection from %{IP:[client][ip]} port %{POSINT:[client][port]}(?: on %{IP:[destination][ip]} port %{POSINT:[destination][port]}|)
@@ -35,15 +35,15 @@ SSHD_SFTP_SESS_OPEN	    Starting session: forced-command \(%{WORD}\) '%{GREEDYDA
 
 # File access %{SSHD_FILE}
 SSHD_FILE_ACCESS        (?:%{SSHD_FILE_ACCESS_RN}|%{SSHD_FILE_ACCESS_CLRD}|%{SSHD_FILE_ACCESS_CLWR}|%{SSHD_FILE_ACCESS_MDIR}|%{SSHD_FILE_ACCESS_OPEN}|%{SSHD_FILE_ACCESS_OPDR}|%{SSHD_FILE_ACCESS_CLDR}|%{SSHD_FILE_ACCESS_SET}|%{SSHD_FILE_ACCESS_RM}|%{SSHD_FILE_ACCESS_MSG})(?: \[%{WORD:[sshd][privsep]}\]|)
-SSHD_FILE_ACCESS_RN     (?:(?<[file][access][action]>posix-rename)|(?<[file][access][action]>rename)) old %{QUOTEDSTRING:[file][original_path]} new %{QUOTEDSTRING:[file][path]}
-SSHD_FILE_ACCESS_CLRD   (?<[file][access][action]>close) %{QUOTEDSTRING:[file][path]} bytes (?<[file][access][type]>read) %{NUMBER:[file][readbytes]} written 0
-SSHD_FILE_ACCESS_CLWR   (?<[file][access][action]>close) %{QUOTEDSTRING:[file][path]} bytes read 0 (?<[file][access][type]>written) %{POSINT:[file][writebytes]}
-SSHD_FILE_ACCESS_MDIR   (?<[file][access][action]>mkdir) name %{QUOTEDSTRING:[file][path]} mode %{NUMBER:[file][mode]}
-SSHD_FILE_ACCESS_OPEN   (?<[file][access][action]>open) %{QUOTEDSTRING:[file][path]} flags (?<[file][access][type]>[\w,]+) mode %{NUMBER:[file][mode]}
-SSHD_FILE_ACCESS_OPDR   (?<[file][access][action]>opendir) %{QUOTEDSTRING:[file][path]}
-SSHD_FILE_ACCESS_CLDR   (?<[file][access][action]>closedir) %{QUOTEDSTRING:[file][path]}
-SSHD_FILE_ACCESS_SET    (?<[file][access][action]>set) %{QUOTEDSTRING:[file][path]} %{WORD:[file][access][type]} %{NOTSPACE}
-SSHD_FILE_ACCESS_RM     (?<[file][access][action]>remove) name %{QUOTEDSTRING:[file][path]}
+SSHD_FILE_ACCESS_RN     (?:(?<_tmpfiletype>posix-rename)|(?<_tmpfiletype>rename)) old %{QUOTEDSTRING:[file][original_path]} new %{QUOTEDSTRING:[file][path]}
+SSHD_FILE_ACCESS_CLRD   (?<_tmpfiletype>close) %{QUOTEDSTRING:[file][path]} bytes (?<_tmpfileaction>read) %{NUMBER:[file][readbytes]} written 0
+SSHD_FILE_ACCESS_CLWR   (?<_tmpfiletype>close) %{QUOTEDSTRING:[file][path]} bytes read 0 (?<_tmpfileaction>written) %{POSINT:[file][writebytes]}
+SSHD_FILE_ACCESS_MDIR   (?<_tmpfiletype>mkdir) name %{QUOTEDSTRING:[file][path]} mode %{NUMBER:[file][mode]}
+SSHD_FILE_ACCESS_OPEN   (?<_tmpfiletype>open) %{QUOTEDSTRING:[file][path]} flags (?<_tmpfileaction>[\w,]+) mode %{NUMBER:[file][mode]}
+SSHD_FILE_ACCESS_OPDR   (?<_tmpfiletype>opendir) %{QUOTEDSTRING:[file][path]}
+SSHD_FILE_ACCESS_CLDR   (?<_tmpfiletype>closedir) %{QUOTEDSTRING:[file][path]}
+SSHD_FILE_ACCESS_SET    (?<_tmpfiletype>set) %{QUOTEDSTRING:[file][path]} %{WORD:_tmpfileaction} %{NOTSPACE}
+SSHD_FILE_ACCESS_RM     (?<_tmpfiletype>remove) name %{QUOTEDSTRING:[file][path]}
 SSHD_FILE_ACCESS_MSG    sent status %{GREEDYDATA:[file][access][message]}
 
 # Other PAM messages %{SSHD_PAM}
@@ -89,6 +89,6 @@ SSHD_TCPWRAP_FAIL4      warning: %{DATA:[sshd][tcpdfile]}, line %{NUMBER}: host 
 SSHD_TCPWRAP_FAIL5      warning: can't get client address: Connection reset by peer
 
 # General
-#SSHD_SYSLOG_HEAD        %{SYSLOGTIMESTAMP:[_tmp][timestamp]} (?<[event][provider]>[\w-]+) %{WORD:[process][name]}\[%{POSINT:[process][pid]}\]:
+SSHD_SYSLOG_HEAD        %{SYSLOGTIMESTAMP:[_tmptimestamp]} (?<[log][syslog][hostname]>[\w-]+) %{WORD:[process][name]}\[%{POSINT:[process][pid]}]:
 
 #SSHD %{SSHD_SYSLOG_HEAD} (?:%{SSHD_INIT}|%{SSHD_SESSION_ACCEPT}|%{SSHD_AUTH}|%{SSHD_AUTH_FAILURE}|%{SSHD_SESSION}|%{SSHD_FILE}|%{SSHD_PAM}|%{SSHD_PREAUTH}|%{SSHD_ERROR})
