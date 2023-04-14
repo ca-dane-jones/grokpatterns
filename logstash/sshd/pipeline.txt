@@ -1,39 +1,53 @@
+################################################################################
+# Logstash Pipeline for SSHD syslog events
+#   version: 1.0.17
+#   date: 2023-04-14
+#
+# TODO - Process disconnect events (event object info)
+# TODO - Add error events (event and error object info)
+# TODO - Updated event fields based on connection status
+# TODO - General cleanup
+# TODO - Move file access events to ECS event object framework
+################################################################################
 input {
     file {
-        path => "/tmp/sftp/test.log"
+        path => "/tmp/sftp/test*.log"
         start_position => "beginning"
     }
 }
 filter {
-    mutate {
+
+    alter {
         add_field => {
-            "[ecs][version]" => "8.6.0"
+            "[@metadata][now]" => "%{+YYYY.MM.dd.ss:SSS}"
         }
     }
+
+    # Add event base fields
     mutate {
+        add_field => { 
+            "[ecs][version]" => "8.6.0" }
         add_field => {
-            "[event][kind]" => "event"
-        }
-    }
-    mutate {
+            "[event][created]" => "%{[@metadata][now]}" }
+        add_field => { 
+            "[event][kind]" => "event" }
+        add_field => { 
+            "[event][category]" => "session" }
         add_field => {
-            "[event][category]" => "session"
-        }
-    }
-    mutate {
+            "[event][type]" => "info" }
         add_field => {
-            "[event][type]" => "info"
-        }
+            "[event][timezone]" => "America/Chicago" }
+        tag_on_failure => ["mutate-basefields-failed"]
     }
-    mutate {
-        add_field => {
-            "[event][timezone]" => "America/Chicago"
-        }
-    }
+
+    # Extract syslog header and message parts from full log string
     grok {
         patterns_dir => ["./patterns"]
-        match => { "message" => "%{SYSLOGTIMESTAMP:[_tmp][timestamp]} (?<[log][syslog][hostname]>[\w-]+) %{WORD:[process][name]}\[%{POSINT:[process][id]}]: %{GREEDYDATA:[_tmp][message]}" }
+        match => { "message" => "%{SYSLOGTIMESTAMP:[_tmp][timestamp]} (?<[log][syslog][hostname]>[\w-]+) %{WORD:[process][name]}\[%{POSINT:[process][pid]}]: %{GREEDYDATA:[_tmp][message]}" }
+        tag_on_failure => ["grok-syslog-failed"]
     }
+
+    # Convert syslog date and assign it as the event's @timestamp
     date {
         locale => "en"
         timezone => "%{[event][timezone]}"
@@ -42,25 +56,38 @@ filter {
             "MMM  d HH:mm:ss",
             "MMM d  HH:mm:ss" ]
         target => "@timestamp"
-        tag_on_failure => [ "date-parse-failure" ]
-    }
-    mutate {
-        copy => { "[process][name]" => "[event][provider]" }
-    }
-    mutate {
-        copy => { "[process][name]" => "[log][syslog][appname]" }
-    }
-    mutate {
-        copy => { "[process][id]" => "[log][syslog][procid]" }
-    }
-    mutate {
-        add_field => {
-            "_tmptraceid" => "%{[log][syslog][hostname]}:%{[process][id]}"
-        }
+        tag_on_failure => ["date-parse-failure" ]
     }
 
-    # Messege parsing -- depends on the presense of grok patterns defined in
-    # sshd.txt located in the ./patterns directory
+    mutate {
+        copy => { 
+            "[process][name]" => "[event][provider]" }
+        tag_on_failure => ["mutate-eventprovider-failed" ]
+    }
+    mutate {
+        copy => { 
+            "[process][name]" => "[log][syslog][appname]" }
+        tag_on_failure => ["mutate-logsyslogappname-failed" ]
+    }
+    mutate {
+        copy => { 
+            "[process][pid]" => "[log][syslog][procid]" }
+        tag_on_failure => ["mutate-logsyslogprocid-failed" ]
+    }
+
+    mutate {
+        add_field => {
+            "_tmptraceid" => "%{[log][syslog][hostname]}:%{[process][pid]}" }
+        tag_on_failure => ["mutate-_tmptraceid-failed"]
+    }
+
+    mutate {
+        replace => { 
+            "[message]" => "%{[_tmp][message]}" }
+        tag_on_failure => ["mutate-replacemessage-failed"]
+    }
+
+    # Messege parsing -- depends on the presense of grok patterns defined in sshd.txt located in the ./patterns directory
     grok {
         patterns_dir => ["./patterns"]
         match => { 
@@ -69,14 +96,15 @@ filter {
                 "(?:%{SSHD_SESSION_ACCEPT}|%{SSHD_AUTH_REQUEST}|%{SSHD_AUTH_STAT}|%{SSHD_USER_GROUPS}|%{SSHD_AUTH_POSTPONED})",
                 "(?:%{SSHD_AUTH_FAIL}|%{SSHD_AUTH_INVALID_USER})",
                 "(?:%{SSHD_SFTP_SESS_OPEN}|%{SSHD_SESSION_ACTION}|%{SSHD_SESSION_CLOSED2}|%{SSHD_CONN_CLOSING}|%{SSHD_CONN_CLOSED}|%{SSHD_SESSION_XFER_BYTES}|%{SSHD_SESSION_PAM_OPEN}|%{SSHD_SESSION_PAM_CLOSE}|%{SSHD_CONN_OPEN})",
-                "(?:%{SSHD_FILE_ACCESS}",
+                "(?:%{SSHD_FILE_ACCESS})",
                 "(?:%{SSHD_PAM_INIT}|%{SSHD_PAM_CLIENT}|%{SSHD_PAM_TTY})",
                 "(?:%{SSHD_DISC_PREAUTH}|%{SSHD_RECE_PREAUTH}|%{SSHD_MAXE_PREAUTH}|%{SSHD_DISR_PREAUTH}|%{SSHD_INVA_PREAUTH}|%{SSHD_REST_PREAUTH}|%{SSHD_CLOS_PREAUTH}|%{SSHD_FAIL_PREAUTH}|%{SSHD_FAI2_PREAUTH}|%{SSHD_BADL_PREAUTH})",
                 "(?:%{SSHD_IDENT_FAIL}|%{SSHD_MAPB_FAIL}|%{SSHD_RMAP_FAIL}|%{SSHD_TOOMANY_AUTH}|%{SSHD_CORRUPT_MAC}|%{SSHD_PACKET_CORRUPT}|%{SSHD_BAD_VERSION}|%{SSHD_PAM_FAIL}|%{SSHD_PAM_LOGOUT_ERR}|%{SSHD_TUNN_ERR1}|%{SSHD_TUNN_ERR2}|%{SSHD_TUNN_ERR3}|%{SSHD_TUNN_ERR4}|%{SSHD_TUNN_TIMEOUT}|%{SSHD_RECE_PREAUTH})"
             ]
         }
+        tag_on_failure => ["grok-message-failed"]
     }
-
+    
     # Process client geo IP information
     if [client][ip] or [client][ip] =~ /.*/ {
         
@@ -84,7 +112,7 @@ filter {
         geoip {
             default_database_type => "City"
             source => "[client][ip]"
-            target => "[client][geo]"
+            target => "[client]"
      		tag_on_failure => ["geoip-city-failed"]       
         }
         
@@ -92,7 +120,7 @@ filter {
         geoip {
             default_database_type => "ASN"
             source => "[client][ip]"
-            target => "[client][geo]"
+            target => "[client]"
      		tag_on_failure => ["geoip-asn-failed"]       
         }
 
@@ -103,21 +131,68 @@ filter {
     }
 
     # Split group name string into an array
-    mutate {
-         split => { "[user][group][name]" => "," }
+    if [user][group][name] or [user][group][name] =~ /.*/ {
+        mutate {
+            split => { "[user][group][name]" => "," }
+        }
     }
     
     # File events
-    mutate {
-        lowercase => [ "[file][access][type]" ]
-        # Convert file access type to array for multimode access types (e.g. write,create)
-        split => { "[file][access][type]" => "," }
-    }
-    if [file][access][type] == "written" {
+    if [file][access][action] or [file][acesss][action] {
+        
+        # Add "file" to the event category
         mutate {
-            replace => { "[file][action][type]" => "write" }
+            add_field => { "[event][category]" => "file" }
+        }
+
+        if [file][access][type] or [file][access][type] =~ /.*/ {
+            
+            # Drop file access type to lowercase for string comparisons
+            mutate {
+                lowercase => [ "[file][access][type]" ]
+            }
+            
+            # Replace the phrase "written" with the phrase "write" for search term nomalization
+            mutate {
+                gsub => [ 
+                    "[file][access][type]", "written", "write" ]
+            }
+            
+            # Split the access type string into an array
+            mutate {
+                # Convert file access type to array for multimode access types (e.g. write,create)
+                split => { "[file][access][type]" => "," }
+            }
+        }
+        
+        # Add file access types to events that don't contain specific types in their log strings
+        if "posix-rename" in [file][access][action] or "rename" in [file][access][action] {
+            mutate {
+                add_field => { "[file][access][type]" => "rename" }
+            }
+        }
+        if "mkdir" in [file][access][type] {
+            mutate {
+                add_field => { "[file][access][type]" => "create-dir" }
+            }
+        }
+        if "opendir" in [file][access][type] {
+            mutate {
+                add_field => { "[file][access][type]" => "open-dir" }
+            }
+        }
+        if "closedir" in [file][access][type] {
+            mutate {
+                add_field => { "[file][access][type]" => "close-dir" }
+            }
+        }
+        if "remove" in [file][access][type] {
+            mutate {
+                add_field => { "[file][access][type]" => "delete" }
+            }
         }
     }
+    
 
     # Event Object - Authentication Events
     if [sshd][authentication][result] or [sshd][authentication][result] =~ /.*/ {
@@ -127,30 +202,34 @@ filter {
             lowercase => [ "[sshd][authentication][result]" ]
         }    
     
-        # Add authentication to the event.category object
+        # Add authentication tags to the event.category object
         mutate {
             add_field => { "[event][category]" => "authentication" }
         }
 
-        # Successful authentication
+        # Successful authentication - Record the authentication method and add session start to event info
         if [sshd][authentication][result] == "accepted" {
             mutate {
+                add_field => { "[event][type]" => "start" }
+                add_field => { "[event][type]" => "allowed" }
                 add_field => { "[event][outcome]" => "success" }
                 add_field => { "[event][reason]" => "valid-%{[sshd][authentication][method]}" }
             }
         }
 
-        # Failed authentication -- Invalid user
+        # Failed authentication (Invalid user) - Record the authentication method and add session denied to event info 
         if [sshd][authentication][result] == "invalid user" {
             mutate {
+                add_field => { "[event][type]" => "denied" }
                 add_field => { "[event][outcome]" => "failure" }
                 add_field => { "[event][reason]" => "invalid-user" }
             }
         }
 
-        # Failed authentication -- Method (e.g. password, publikey)
+        # Failed authentication (password, publikey, etc) - Record the authentication method and add session denied to event info
         if [sshd][authentication][result] == "failed" {
             mutate {
+                add_field => { "[event][type]" => "denied" }
                 add_field => { "[event][outcome]" => "failure" }
                 add_field => { "[event][reason]" => "invalid-%{[sshd][authentication][method]}" }
             }
@@ -170,8 +249,8 @@ filter {
         memcached {
             hosts => ["localhost"]
             namespace => "sshd"
-            tag_on_failure => "memcached-set_trace_id-failed"
-            ttl => 1800
+            tag_on_failure => "memcached-settraceid-failed"
+            ttl => 30
             set => {
                 "[_tmpusername]" => "%{_tmptraceid}"
             }
@@ -185,7 +264,7 @@ filter {
 
     } else {
         
-        # Perform lookup for user.id against memcached
+        # Perform lookup for user.name against memcached
         memcached {
             hosts => ["localhost"]
             namespace => "sshd"
@@ -196,11 +275,14 @@ filter {
         }
         
         # If memcached returned a result, add the result to the temporary trace ID and create the trace ID nested field
+        # Also add the user name to the event
         if [_tmpmemcachedresult] or [_tmpmemcachedresult] =~ /.*/ {
+            
             mutate {
                 add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcachedresult]}" }
+                add_field => { "[user][name]" => "%{[_tmpmemcachedresult]}" }
             }
-
+        
         } else {
 
             # Otherwise, just build the trace ID nested field from the temporary flat field
@@ -209,12 +291,28 @@ filter {
             }
         }
     }
-    #TODO - Updated event fields based on connection status
-    #TODO - Drop temp fields
-    #TODO - General cleanup
-    #TODO - Record pipeline processing/execution time
+
+    # Remove temporary fields
+    mutate {
+        remove_field => [
+            "_tmp",
+            "_tmpmemcachedresult", 
+            "_tmptraceid",
+            "_tmpusername" ]
+    }
 }
 
 output {
-    stdout { }
+    #stdout { }
+    elasticsearch{
+        action => "create"
+        data_stream => "true"
+        data_stream_type => "logs"
+        data_stream_dataset => "sshd"
+        data_stream_namespace => "hrc"
+        hosts => ["https://localhost:9200"]
+        user => "logstash_admin"
+        password => "ewK5gHbg94RQxVm"
+        ca_trusted_fingerprint => "7B7942D98D74084C49C988346D33D834F2480BDA9C5DA967F18D28B5A286FC8B"
+    }
 }
