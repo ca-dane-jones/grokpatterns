@@ -456,10 +456,10 @@ output {
         data_stream => "true"
         data_stream_type => "logs"
         data_stream_dataset => "sshd"
-        data_stream_namespace => "hrc"
+        data_stream_namespace => "yournamespace"
         hosts => ["https://localhost:9200"]
-        user => "logstash_admin"
-        password => "ewK5gHbg94RQxVm"
+        user => "youruser"
+        password => "yourpass"
         ca_trusted_fingerprint => "7B7942D98D74084C49C988346D33D834F2480BDA9C5DA967F18D28B5A286FC8B"
     }
 }
