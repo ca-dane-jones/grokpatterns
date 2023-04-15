@@ -1,6 +1,6 @@
 ################################################################################
 # Logstash Pipeline for SSHD syslog events
-#   version: 1.0.25
+#   version: 1.0.31
 #   date: 2023-04-14
 #
 # TODO - Process disconnect events (event object info)
@@ -61,30 +61,25 @@ filter {
     }
 
     mutate {
-        copy => { 
-            "[process][name]" => "[event][provider]" }
+        copy => { "[process][name]" => "[event][provider]" }
         tag_on_failure => ["mutate-eventprovider-failed" ]
     }
     mutate {
-        copy => { 
-            "[process][name]" => "[log][syslog][appname]" }
+        copy => { "[process][name]" => "[log][syslog][appname]" }
         tag_on_failure => ["mutate-logsyslogappname-failed" ]
     }
     mutate {
-        copy => { 
-            "[process][pid]" => "[log][syslog][procid]" }
+        copy => { "[process][pid]" => "[log][syslog][procid]" }
         tag_on_failure => ["mutate-logsyslogprocid-failed" ]
     }
 
     mutate {
-        add_field => {
-            "_tmptraceid" => "%{[log][syslog][hostname]}:%{[process][pid]}" }
+        add_field => { "_tmptraceid" => "%{[log][syslog][hostname]}:%{[process][pid]}" }
         tag_on_failure => ["mutate-_tmptraceid-failed"]
     }
 
     mutate {
-        replace => { 
-            "[message]" => "%{[_tmp][message]}" }
+        replace => { "[message]" => "%{[_tmp][message]}" }
         tag_on_failure => ["mutate-replacemessage-failed"]
     }
 
@@ -137,7 +132,6 @@ filter {
             split => { "[user][group][name]" => "," }
         }
     }
-    
     
     # File events
     if [_tmpfiletype] or [_tmpfiletype] =~ /.*/ {
@@ -286,7 +280,7 @@ filter {
         }
 
         # Failed authentication (Invalid user) - Record the authentication method and add session denied to event info 
-        if [sshd][authentication][result] == "invalid user" {
+        else if [sshd][authentication][result] == "failed" and [_tmp][invuser] == "invalid user" {
             mutate {
                 add_field => { "[event][type]" => "denied" }
                 add_field => { "[event][outcome]" => "failure" }
@@ -295,7 +289,7 @@ filter {
         }
 
         # Failed authentication (password, publikey, etc) - Record the authentication method and add session denied to event info
-        if [sshd][authentication][result] == "failed" {
+        else if [sshd][authentication][result] == "failed" {
             mutate {
                 add_field => { "[event][type]" => "denied" }
                 add_field => { "[event][outcome]" => "failure" }
@@ -327,7 +321,11 @@ filter {
         # Create trace ID and update _tmptraceid because we'll need it later
         mutate {
             add_field => { "[trace][id]" => "%{_tmptraceid}:%{[user][name]}" }
-            replace => { "%{_tmptraceid}" => "%{[trace][id]}" }
+        }
+
+        # Replace the value in _tmptraceid
+        mutate {
+            replace => { "_tmptraceid" => "%{[trace][id]}" }
         }
 
     } else {
@@ -349,7 +347,10 @@ filter {
             mutate {
                 add_field => { "[trace][id]" => "%{_tmptraceid}:%{[_tmpmemcachedresult]}" }
                 add_field => { "[user][name]" => "%{[_tmpmemcachedresult]}" }
-                replace => { "%{_tmptraceid}" => "%{[trace][id]}" }
+            }
+
+            mutate {
+                replace => { "_tmptraceid" => "%{[trace][id]}" }
             }
         
         } else {
@@ -445,7 +446,8 @@ filter {
             "_tmpmemcachedresult", 
             "_tmpmemcachedeventstart",
             "_tmptraceid",
-            "_tmpusername" ]
+            "_tmpusername" 
+        ]
     }
 }
 
@@ -456,10 +458,10 @@ output {
         data_stream => "true"
         data_stream_type => "logs"
         data_stream_dataset => "sshd"
-        data_stream_namespace => "yournamespace"
+        data_stream_namespace => ""
         hosts => ["https://localhost:9200"]
-        user => "youruser"
-        password => "yourpass"
-        ca_trusted_fingerprint => "7B7942D98D74084C49C988346D33D834F2480BDA9C5DA967F18D28B5A286FC8B"
+        user => ""
+        password => ""
+        ca_trusted_fingerprint => ""
     }
 }
